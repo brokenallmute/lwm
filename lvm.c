@@ -1,3 +1,7 @@
+/*
+ * Simple Window Manager (LWM)
+ * Lightweight X11 window manager with EWMH support
+ */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -72,17 +76,10 @@ unsigned int mouse_mod_mask = Mod1Mask;
 #define BAR_HEIGHT             26
 #define MENU_ITEM_H            30
 #define MIN_SIZE               60
+#define MAX_CLIENTS            256
 #define DEFAULT_WINDOW_WIDTH   800
 #define DEFAULT_WINDOW_HEIGHT  500
 #define BUTTON_PADDING         8
-#define MAX_PATH_LEN           256
-#define MAX_BUFFER_LEN         256
-#define MAX_COLOR_STR          16
-#define MAX_FONT_STR           64
-#define MAX_CMD_STR            128
-#define MAX_KEY_STR            32
-#define MAX_MOD_STR            32
-#define MAX_CLIENTS            256
 
 /*
  * Global X11 display variables
@@ -126,7 +123,7 @@ XButtonEvent start_ev;
  * Returns pixel value or 0 on failure
  */
 unsigned long get_pixel(const char* color_hex) {
-    if (!color_hex || !dpy) {
+    if (!dpy) {
         return 0;
     }
 
@@ -134,12 +131,9 @@ unsigned long get_pixel(const char* color_hex) {
     XColor color;
 
     if (!XParseColor(dpy, cmap, color_hex, &color)) {
-        fprintf(stderr, "Warning: Failed to parse color '%s'\n", color_hex);
         return 0;
     }
-
     if (!XAllocColor(dpy, cmap, &color)) {
-        fprintf(stderr, "Warning: Failed to allocate color '%s'\n", color_hex);
         return 0;
     }
 
@@ -172,18 +166,8 @@ unsigned int str_to_mod(const char* str) {
  * Create default configuration file in home directory
  */
 void create_default_config(const char* path) {
-    if (!path) {
-        return;
-    }
-
-    const char *home = getenv("HOME");
-    if (!home) {
-        fprintf(stderr, "Error: HOME environment variable not set\n");
-        return;
-    }
-
-    char cmd[MAX_PATH_LEN];
-    snprintf(cmd, sizeof(cmd), "mkdir -p %s/.config", home);
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "mkdir -p %s/.config", getenv("HOME"));
     system(cmd);
 
     FILE *f = fopen(path, "w");
@@ -197,13 +181,10 @@ void create_default_config(const char* path) {
     fprintf(f, "BORDER_COLOR  #000000\n");
     fprintf(f, "BUTTON_COLOR  #e8e4cf\n");
     fprintf(f, "TEXT_COLOR    #FFFFFF\n");
-    fprintf(f, "LINE_COLOR    #FFFFFF\n\n");
-    fprintf(f, "# Font selection (fixed, 6x13, 9x15, etc)\n");
-    fprintf(f, "FONT          fixed\n\n");
-    fprintf(f, "# Mouse modifier (Mod1, Mod4, Shift, Control)\n");
-    fprintf(f, "MOUSE_MOD     Mod1\n\n");   
+    fprintf(f, "LINE_COLOR    #FFFFFF\n");
+    fprintf(f, "FONT          fixed\n");
+    fprintf(f, "MOUSE_MOD     Mod1\n\n");
     fprintf(f, "# Keybindings configuration\n");
-    fprintf(f, "# Syntax: BIND <MODIFIER> <KEY> <COMMAND>\n");
     fprintf(f, "BIND Mod4 Return xterm\n");
     fprintf(f, "BIND Mod4 Tab menu\n");
     fprintf(f, "BIND Mod1 Tab cycle\n");
@@ -213,7 +194,7 @@ void create_default_config(const char* path) {
     fprintf(f, "BIND Mod4 d flameshot gui\n");
 
     fclose(f);
-    printf("Created default config at %s\n", path);
+    printf("[lwm] Created default config at %s\n", path);
 }
 
 /*
@@ -221,29 +202,17 @@ void create_default_config(const char* path) {
  * Sets defaults and reads user config if available
  */
 void load_config() {
-    strncpy(conf.bar_color, "#4C837E", MAX_COLOR_STR - 1);
-    conf.bar_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.bg_color, "#83A597", MAX_COLOR_STR - 1);
-    conf.bg_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.border_color, "#000000", MAX_COLOR_STR - 1);
-    conf.border_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.button_color, "#e8e4cf", MAX_COLOR_STR - 1);
-    conf.button_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.text_color, "#FFFFFF", MAX_COLOR_STR - 1);
-    conf.text_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.line_color, "#FFFFFF", MAX_COLOR_STR - 1);
-    conf.line_color[MAX_COLOR_STR - 1] = '\0';
-    strncpy(conf.font_name, "fixed", MAX_FONT_STR - 1);
-    conf.font_name[MAX_FONT_STR - 1] = '\0';
+    strncpy(conf.bar_color, "#4C837E", sizeof(conf.bar_color) - 1);
+    strncpy(conf.bg_color, "#83A597", sizeof(conf.bg_color) - 1);
+    strncpy(conf.border_color, "#000000", sizeof(conf.border_color) - 1);
+    strncpy(conf.button_color, "#e8e4cf", sizeof(conf.button_color) - 1);
+    strncpy(conf.text_color, "#FFFFFF", sizeof(conf.text_color) - 1);
+    strncpy(conf.line_color, "#FFFFFF", sizeof(conf.line_color) - 1);
+    strncpy(conf.font_name, "fixed", sizeof(conf.font_name) - 1);
+    strncpy(conf.mouse_mod, "Mod1", sizeof(conf.mouse_mod) - 1);
 
-    const char *home = getenv("HOME");
-    if (!home) {
-        fprintf(stderr, "Error: HOME environment variable not set\n");
-        return;
-    }
-
-    char path[MAX_PATH_LEN];
-    snprintf(path, sizeof(path), "%s/.config/lwm.conf", home);
+    char path[256];
+    snprintf(path, sizeof(path), "%s/.config/lwm.conf", getenv("HOME"));
 
     if (access(path, F_OK) != 0) {
         create_default_config(path);
@@ -254,8 +223,8 @@ void load_config() {
         return;
     }
 
-    char line[MAX_BUFFER_LEN];
-    char key[64], val[64], cmd[MAX_CMD_STR];
+    char line[256];
+    char key[64], val[64], cmd[128];
 
     while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\r\n")] = 0;
@@ -266,46 +235,38 @@ void load_config() {
 
         if (sscanf(line, "%63s %63s", key, val) == 2) {
             if (strcmp(key, "BAR_COLOR") == 0) {
-                strncpy(conf.bar_color, val, MAX_COLOR_STR - 1);
-                conf.bar_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.bar_color, val, sizeof(conf.bar_color) - 1);
             }
             else if (strcmp(key, "BG_COLOR") == 0) {
-                strncpy(conf.bg_color, val, MAX_COLOR_STR - 1);
-                conf.bg_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.bg_color, val, sizeof(conf.bg_color) - 1);
             }
             else if (strcmp(key, "BORDER_COLOR") == 0) {
-                strncpy(conf.border_color, val, MAX_COLOR_STR - 1);
-                conf.border_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.border_color, val, sizeof(conf.border_color) - 1);
             }
             else if (strcmp(key, "BUTTON_COLOR") == 0) {
-                strncpy(conf.button_color, val, MAX_COLOR_STR - 1);
-                conf.button_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.button_color, val, sizeof(conf.button_color) - 1);
             }
             else if (strcmp(key, "TEXT_COLOR") == 0) {
-                strncpy(conf.text_color, val, MAX_COLOR_STR - 1);
-                conf.text_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.text_color, val, sizeof(conf.text_color) - 1);
             }
             else if (strcmp(key, "LINE_COLOR") == 0) {
-                strncpy(conf.line_color, val, MAX_COLOR_STR - 1);
-                conf.line_color[MAX_COLOR_STR - 1] = '\0';
+                strncpy(conf.line_color, val, sizeof(conf.line_color) - 1);
             }
             else if (strcmp(key, "FONT") == 0) {
-                strncpy(conf.font_name, val, MAX_FONT_STR - 1);
-                conf.font_name[MAX_FONT_STR - 1] = '\0';
+                strncpy(conf.font_name, val, sizeof(conf.font_name) - 1);
             }
             else if (strcmp(key, "MOUSE_MOD") == 0) {
-                strcpy(conf.mouse_mod, val);
+                strncpy(conf.mouse_mod, val, sizeof(conf.mouse_mod) - 1);
             }
         }
 
-        char mod_str[MAX_MOD_STR], key_str[MAX_KEY_STR];
+        char mod_str[32], key_str[32];
 
         if (sscanf(line, "BIND %31s %31s %127[^\t\n]", mod_str, key_str, cmd) == 3) {
             if (bind_count < 64) {
                 binds[bind_count].mod = str_to_mod(mod_str);
                 binds[bind_count].key = XStringToKeysym(key_str);
-                strncpy(binds[bind_count].command, cmd, MAX_CMD_STR - 1);
-                binds[bind_count].command[MAX_CMD_STR - 1] = '\0';
+                strncpy(binds[bind_count].command, cmd, sizeof(binds[bind_count].command) - 1);
                 bind_count++;
             }
         }
@@ -314,14 +275,18 @@ void load_config() {
     fclose(f);
 
     mouse_mod_mask = str_to_mod(conf.mouse_mod);
-    if (mouse_mod_mask == 0) mouse_mod_mask = Mod1Mask;
+    if (mouse_mod_mask == 0) {
+        mouse_mod_mask = Mod1Mask;
+    }
 
     if (bind_count == 0) {
         binds[0].mod = Mod4Mask;
         binds[0].key = XK_Return;
-        strncpy(binds[0].command, "xterm", MAX_CMD_STR - 1);
-        binds[0].command[MAX_CMD_STR - 1] = '\0';
-        bind_count = 1;
+        strncpy(binds[0].command, "xterm", sizeof(binds[0].command) - 1);
+        binds[1].mod = Mod4Mask;
+        binds[1].key = XK_q;
+        strncpy(binds[1].command, "quit", sizeof(binds[1].command) - 1);
+        bind_count = 2;
     }
 }
 
@@ -433,27 +398,13 @@ void set_active_window(Window w) {
  * Detaches from display connection and creates a new session
  */
 void spawn(const char* command) {
-    if (!command) {
-        return;
-    }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork failed");
-        return;
-    }
-
-    if (pid == 0) {
+    if (fork() == 0) {
         if (dpy) {
             close(ConnectionNumber(dpy));
         }
-        if (setsid() == -1) {
-            perror("setsid failed");
-            exit(1);
-        }
+        setsid();
         execl("/bin/sh", "sh", "-c", command, NULL);
-        perror("execl failed");
-        exit(1);
+        exit(0);
     }
 }
 
@@ -549,14 +500,11 @@ void update_bar() {
     XGCValues gcv;
     gcv.font = font_info->fid;
     GC gc = XCreateGC(dpy, bar_win, GCFont, &gcv);
-    if (!gc) {
-        return;
-    }
 
     XSetForeground(dpy, gc, get_pixel(conf.bar_color));
     XFillRectangle(dpy, bar_win, gc, 0, 0, sw, BAR_HEIGHT);
 
-    char buffer[MAX_BUFFER_LEN];
+    char buffer[256];
     char time_str[64];
     time_t t = time(NULL);
     struct tm *tm_info = localtime(&t);
@@ -592,29 +540,6 @@ void update_bar() {
 /*
  * Draw window decorations (title bar, buttons, borders)
  */
-static void draw_button(GC gc, Window frame, int x, int y, int size,
-                        unsigned long fill_color, unsigned long border_color, int button_type) {
-    XSetForeground(dpy, gc, fill_color);
-    XFillRectangle(dpy, frame, gc, x, y, size, size);
-    XSetForeground(dpy, gc, border_color);
-    XDrawRectangle(dpy, frame, gc, x, y, size, size);
-
-    if (button_type == 0) {
-        int pad = BUTTON_PADDING;
-        XDrawLine(dpy, frame, gc, x + pad, y + pad, x + size - pad, y + size - pad);
-        XDrawLine(dpy, frame, gc, x + pad + 1, y + pad, x + size - pad + 1, y + size - pad);
-        XDrawLine(dpy, frame, gc, x + pad, y + size - pad, x + size - pad, y + pad);
-        XDrawLine(dpy, frame, gc, x + pad + 1, y + size - pad, x + size - pad + 1, y + pad);
-    } else if (button_type == 1) {
-        int cx = x + (size / 2);
-        int cy = y + (size / 2) + 3;
-        XDrawLine(dpy, frame, gc, x + 8, y + 10, cx, cy);
-        XDrawLine(dpy, frame, gc, x + 9, y + 10, cx + 1, cy);
-        XDrawLine(dpy, frame, gc, x + size - 8, y + 10, cx, cy);
-        XDrawLine(dpy, frame, gc, x + size - 9, y + 10, cx - 1, cy);
-    }
-}
-
 void draw_decorations(Window frame, int width, int height) {
     for (int i = 0; i < client_count; i++) {
         if (clients[i].frame == frame && clients[i].is_fullscreen) {
@@ -629,9 +554,6 @@ void draw_decorations(Window frame, int width, int height) {
     XGCValues gcv;
     gcv.foreground = get_pixel(conf.border_color);
     GC gc = XCreateGC(dpy, frame, GCForeground, &gcv);
-    if (!gc) {
-        return;
-    }
 
     unsigned long bar_pixel = get_pixel(conf.bar_color);
     unsigned long btn_pixel = get_pixel(conf.button_color);
@@ -643,29 +565,34 @@ void draw_decorations(Window frame, int width, int height) {
 
     XSetForeground(dpy, gc, border_pixel);
     XDrawRectangle(dpy, frame, gc, 0, 0, width - 1, height + TITLE_HEIGHT - 1);
-
     XSetForeground(dpy, gc, line_pixel);
     XDrawLine(dpy, frame, gc, 0, TITLE_HEIGHT - 1, width, TITLE_HEIGHT - 1);
 
     int btn_size = TITLE_HEIGHT;
 
-    draw_button(gc, frame, 0, 0, btn_size, btn_pixel, border_pixel, 0);
+    XSetForeground(dpy, gc, btn_pixel);
+    XFillRectangle(dpy, frame, gc, 0, 0, btn_size, btn_size);
+    XSetForeground(dpy, gc, border_pixel);
+    XDrawRectangle(dpy, frame, gc, 0, 0, btn_size, btn_size);
+    int pad = BUTTON_PADDING;
+    XDrawLine(dpy, frame, gc, pad, pad, btn_size - pad, btn_size - pad);
+    XDrawLine(dpy, frame, gc, pad + 1, pad, btn_size - pad + 1, btn_size - pad);
+    XDrawLine(dpy, frame, gc, pad, btn_size - pad, btn_size - pad, pad);
+    XDrawLine(dpy, frame, gc, pad + 1, btn_size - pad, btn_size - pad + 1, pad);
 
     int x_right = width - btn_size;
-    draw_button(gc, frame, x_right, 0, btn_size, btn_pixel, border_pixel, 1);
+    XSetForeground(dpy, gc, btn_pixel);
+    XFillRectangle(dpy, frame, gc, x_right, 0, btn_size, btn_size);
+    XSetForeground(dpy, gc, border_pixel);
+    XDrawRectangle(dpy, frame, gc, x_right, 0, btn_size, btn_size);
+    int cx = x_right + (btn_size / 2);
+    int cy = (btn_size / 2) + 3;
+    XDrawLine(dpy, frame, gc, x_right + 8, 10, cx, cy);
+    XDrawLine(dpy, frame, gc, x_right + 9, 10, cx + 1, cy);
+    XDrawLine(dpy, frame, gc, x_right + btn_size - 8, 10, cx, cy);
+    XDrawLine(dpy, frame, gc, x_right + btn_size - 9, 10, cx - 1, cy);
 
     XFreeGC(dpy, gc);
-}
-
-/*
- * Grab mouse buttons for window movement and resizing
- */
-void grab_buttons(Window client) {
-    XGrabButton(dpy, Button1, mouse_mod_mask, client, False, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-    XGrabButton(dpy, Button3, mouse_mod_mask, client, False, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-    XGrabButton(dpy, Button1, mouse_mod_mask|Mod2Mask, client, False, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-    XGrabButton(dpy, Button3, mouse_mod_mask|Mod2Mask, client, False, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-    XGrabButton(dpy, Button1, AnyModifier, client, False, ButtonPressMask, GrabModeSync, GrabModeAsync, None, None);
 }
 
 /*
@@ -678,7 +605,6 @@ void frame_window(Window client) {
 
     XWindowAttributes attrs;
     if (XGetWindowAttributes(dpy, client, &attrs) == 0) {
-        fprintf(stderr, "Warning: Failed to get window attributes\n");
         return;
     }
     if (attrs.override_redirect) {
@@ -741,7 +667,10 @@ void frame_window(Window client) {
     XMapWindow(dpy, frame);
     XMapWindow(dpy, client);
     XAddToSaveSet(dpy, client);
-    grab_buttons(client);
+    XGrabButton(dpy, Button1, mouse_mod_mask, client, False, ButtonPressMask,
+                GrabModeSync, GrabModeAsync, None, None);
+    XGrabButton(dpy, Button3, mouse_mod_mask, client, False, ButtonPressMask,
+                GrabModeSync, GrabModeAsync, None, None);
 
     add_client(client, frame);
     update_client_list();
@@ -973,20 +902,10 @@ int main() {
     font_info = XLoadQueryFont(dpy, conf.font_name);
     if (!font_info) {
         font_info = XLoadQueryFont(dpy, "fixed");
-        if (!font_info) {
-            fprintf(stderr, "Error: Failed to load any font\n");
-            XCloseDisplay(dpy);
-            return 1;
-        }
     }
 
     bar_win = XCreateSimpleWindow(dpy, root, 0, 0, sw, BAR_HEIGHT, 0, 0,
                                   get_pixel(conf.bar_color));
-    if (!bar_win) {
-        fprintf(stderr, "Error: Failed to create bar window\n");
-        XCloseDisplay(dpy);
-        return 1;
-    }
     XSelectInput(dpy, bar_win, ExposureMask);
     XMapWindow(dpy, bar_win);
 
@@ -1005,13 +924,13 @@ int main() {
     }
     XGrabButton(dpy, Button3, Mod1Mask, root, True, ButtonPressMask,
                 GrabModeAsync, GrabModeAsync, None, None);
+    XGrabButton(dpy, Button3, mouse_mod_mask, root, True, ButtonPressMask,
+                GrabModeAsync, GrabModeAsync, None, None);
 
     signal(SIGCHLD, SIG_IGN);
 
     int x11_fd = ConnectionNumber(dpy);
     XEvent ev;
-
-    XGrabButton(dpy, Button3, mouse_mod_mask, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
 
     while (1) {
         while (XPending(dpy)) {
@@ -1143,15 +1062,10 @@ int main() {
                     }
                 }
 
-                if (parent_frame != 0 && parent_frame != bar_win) {
-                    XRaiseWindow(dpy, parent_frame);
-                    if (ev.xbutton.subwindow == None) {
-                        XAllowEvents(dpy, ReplayPointer, CurrentTime);
-                    }
-                }
+                if (!is_fs && (ev.xbutton.state & mouse_mod_mask)) {
+                    if (ev.xbutton.button == Button1 || ev.xbutton.button == Button3) {
+                        XAllowEvents(dpy, AsyncPointer, CurrentTime);
 
-                if (!is_fs) {
-                    if ((ev.xbutton.state & mouse_mod_mask) && ev.xbutton.button == Button3) {
                         if (ev.xbutton.subwindow != None && ev.xbutton.subwindow != bar_win) {
                             XWindowAttributes attr;
                             XGetWindowAttributes(dpy, ev.xbutton.subwindow, &attr);
@@ -1163,6 +1077,7 @@ int main() {
                             drag_state.win_y = attr.y;
                             drag_state.win_w = attr.width;
                             drag_state.win_h = attr.height;
+
                             int rel_x = ev.xbutton.x_root - attr.x;
                             int rel_y = ev.xbutton.y_root - attr.y;
                             if (rel_x < attr.width / 3) {
@@ -1179,47 +1094,43 @@ int main() {
                             } else {
                                 drag_state.resize_y_dir = 0;
                             }
+
                             XGrabPointer(dpy, root, False, ButtonMotionMask | ButtonReleaseMask,
                                         GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
                             XRaiseWindow(dpy, start_ev.window);
                         }
                     }
-                    else if ((ev.xbutton.state & mouse_mod_mask) && ev.xbutton.button == Button1) {
-                        if (ev.xbutton.subwindow != None && ev.xbutton.subwindow != bar_win) {
-                            XWindowAttributes attr; XGetWindowAttributes(dpy, ev.xbutton.subwindow, &attr);
-                            start_ev = ev.xbutton; start_ev.window = ev.xbutton.subwindow;
-                            drag_state.start_root_x = ev.xbutton.x_root; drag_state.start_root_y = ev.xbutton.y_root;
-                            drag_state.win_x = attr.x; drag_state.win_y = attr.y;
-                            XGrabPointer(dpy, root, False, ButtonMotionMask|ButtonReleaseMask, GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
-                            XRaiseWindow(dpy, start_ev.window);
-                        }
-                    }
-                    else if (ev.xbutton.window != root && ev.xbutton.window != bar_win &&
-                             ev.xbutton.y < TITLE_HEIGHT && ev.xbutton.button == Button1) {
-                        XWindowAttributes fa;
-                        XGetWindowAttributes(dpy, ev.xbutton.window, &fa);
-                        int btn_w = TITLE_HEIGHT;
+                }
+                else if (!is_fs && ev.xbutton.window != root && ev.xbutton.window != bar_win &&
+                         ev.xbutton.y < TITLE_HEIGHT && ev.xbutton.button == Button1) {
+                    XAllowEvents(dpy, AsyncPointer, CurrentTime);
+                    XWindowAttributes fa;
+                    XGetWindowAttributes(dpy, ev.xbutton.window, &fa);
+                    int btn_w = TITLE_HEIGHT;
 
-                        if (ev.xbutton.x < btn_w) {
-                            XDestroyWindow(dpy, ev.xbutton.window);
-                        }
-                        else if (ev.xbutton.x > (fa.width - btn_w)) {
-                            XUnmapWindow(dpy, ev.xbutton.window);
-                        }
-                        else {
-                            XRaiseWindow(dpy, ev.xbutton.window);
-                            XWindowAttributes attr;
-                            XGetWindowAttributes(dpy, ev.xbutton.window, &attr);
-                            drag_state.start_root_x = ev.xbutton.x_root;
-                            drag_state.start_root_y = ev.xbutton.y_root;
-                            drag_state.win_x = attr.x;
-                            drag_state.win_y = attr.y;
-                            start_ev = ev.xbutton;
-                            XGrabPointer(dpy, root, False, ButtonMotionMask | ButtonReleaseMask,
-                                        GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
-                        }
+                    if (ev.xbutton.x < btn_w) {
+                        XDestroyWindow(dpy, ev.xbutton.window);
                     }
-
+                    else if (ev.xbutton.x > (fa.width - btn_w)) {
+                        XUnmapWindow(dpy, ev.xbutton.window);
+                    }
+                    else {
+                        XRaiseWindow(dpy, ev.xbutton.window);
+                        XWindowAttributes attr;
+                        XGetWindowAttributes(dpy, ev.xbutton.window, &attr);
+                        drag_state.start_root_x = ev.xbutton.x_root;
+                        drag_state.start_root_y = ev.xbutton.y_root;
+                        drag_state.win_x = attr.x;
+                        drag_state.win_y = attr.y;
+                        start_ev = ev.xbutton;
+                        XGrabPointer(dpy, root, False, ButtonMotionMask | ButtonReleaseMask,
+                                    GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
+                    }
+                } else {
+                    if (parent_frame != 0 && parent_frame != bar_win) {
+                        XRaiseWindow(dpy, parent_frame);
+                    }
+                    XAllowEvents(dpy, ReplayPointer, CurrentTime);
                 }
             }
             else if (ev.type == MotionNotify && start_ev.window) {
