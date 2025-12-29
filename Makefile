@@ -4,7 +4,7 @@ LDFLAGS = -lX11
 
 SRC = lvm.c
 EXEC = lvm
-PREFIX = /usr/bin
+PREFIX = /usr
 
 all: $(EXEC)
 
