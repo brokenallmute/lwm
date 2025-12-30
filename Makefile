@@ -1,4 +1,4 @@
-CC = gcc
+CC = clang
 CFLAGS = -O3 -march=native -fomit-frame-pointer -Wall
 LDFLAGS = -lX11
 
