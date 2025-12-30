@@ -623,7 +623,7 @@ void frame_window(Window client) {
 
     if (!should_frame) { 
         XMapWindow(dpy, client); 
-        grab_buttons(client); 
+        XGrabButton(client); 
         add_client(client, 0); 
         update_client_list(); 
         return; 
