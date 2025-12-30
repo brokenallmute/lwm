@@ -1098,16 +1098,23 @@ int main() {
                                 int rel_x = ev.xbutton.x_root - attr.x;
                                 int rel_y = ev.xbutton.y_root - attr.y;
 
-                                if (rel_x < attr.width / 3) {
-                                    drag_state.resize_x_dir = -1; 
+                                int w_third = attr.width / 3;
+                                int h_third = attr.height / 3;
+
+                                if (rel_x < w_third) {
+                                    drag_state.resize_x_dir = -1;
+                                } else if (rel_x > w_third * 2) {
+                                    drag_state.resize_x_dir = 1;
                                 } else {
-                                    drag_state.resize_x_dir = 1;  
+                                    drag_state.resize_x_dir = 0;
                                 }
 
-                                if (rel_y < attr.height / 3) {
+                                if (rel_y < h_third) {
                                     drag_state.resize_y_dir = -1;
+                                } else if (rel_y > h_third * 2) {
+                                    drag_state.resize_y_dir = 1;
                                 } else {
-                                    drag_state.resize_y_dir = 1;  
+                                    drag_state.resize_y_dir = 0;
                                 }
                                 
                             } else {
