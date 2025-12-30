@@ -10,7 +10,7 @@ depends=('libx11')
 makedepends=('gcc' 'make') 
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/brokenallmute/lwm/archive/refs/tags/v${pkgver}.tar.gz")
 
-sha256sums=('b3fb9357eb72961d1be29b12ca8db9c9c14e7e15419a0142507784a9ffb5827b')
+sha256sums=('be4b82b9a812ea20c0ab0a4776f7dee4897709f1f616d4b400d07f5032902a93')
 
 build() {
     cd "lwm-${pkgver}"
