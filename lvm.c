@@ -162,7 +162,6 @@ unsigned int str_to_mod(const char* str) {
     return mod;
 }
 
-
 /*
  * Create default configuration file in home directory
  */
@@ -566,7 +565,6 @@ void draw_decorations(Window frame, int width, int height) {
 
     XSetForeground(dpy, gc, border_pixel);
     XDrawRectangle(dpy, frame, gc, 0, 0, width - 1, height + TITLE_HEIGHT - 1);
-
     XSetForeground(dpy, gc, line_pixel);
     XDrawLine(dpy, frame, gc, 0, TITLE_HEIGHT - 1, width, TITLE_HEIGHT - 1);
 
@@ -628,8 +626,7 @@ void frame_window(Window client) {
                 type == wmatoms[NET_WM_WINDOW_TYPE_MENU] ||
                 type == wmatoms[NET_WM_WINDOW_TYPE_SPLASH] ||
                 type == wmatoms[NET_WM_WINDOW_TYPE_NOTIFICATION] ||
-                type == wmatoms[NET_WM_WINDOW_TYPE_UTILITY] ||
-                type == wmatoms[NET_WM_WINDOW_TYPE_DIALOG]) {
+                type == wmatoms[NET_WM_WINDOW_TYPE_UTILITY]) {
                 should_frame = 0;
             }
             XFree(prop);
@@ -670,24 +667,25 @@ void frame_window(Window client) {
     XMapWindow(dpy, frame);
     XMapWindow(dpy, client);
     XAddToSaveSet(dpy, client);
-    /* Grab with configured mouse modifier */
     XGrabButton(dpy, Button1, mouse_mod_mask, client, False, ButtonPressMask,
                 GrabModeSync, GrabModeAsync, None, None);
     XGrabButton(dpy, Button3, mouse_mod_mask, client, False, ButtonPressMask,
-                GrabModeSync, GrabModeAsync, None, None);
-    /* Also grab with Alt (Mod1) so Alt+RMB/LMB on clients works as expected */
-    XGrabButton(dpy, Button1, Mod1Mask, client, False, ButtonPressMask,
-                GrabModeSync, GrabModeAsync, None, None);
-    XGrabButton(dpy, Button3, Mod1Mask, client, False, ButtonPressMask,
                 GrabModeSync, GrabModeAsync, None, None);
 
     add_client(client, frame);
     update_client_list();
 }
 
-typedef struct { Window frame; char *name; } HiddenWindow;
 /*
- * Display interactive menu of hidden windows
+ * Hidden windows menu structure
+ */
+typedef struct {
+    Window frame;
+    char *name;
+} HiddenWindow;
+
+/*
+ * Display menu of hidden windows and allow user to select one
  */
 void show_hidden_menu() {
     Window root_ret, parent_ret, *children;
@@ -742,7 +740,6 @@ void show_hidden_menu() {
     XSelectInput(dpy, menu, ExposureMask | PointerMotionMask | ButtonPressMask | KeyPressMask);
     XSetTransientForHint(dpy, menu, root);
     XMapWindow(dpy, menu);
-
     XGrabPointer(dpy, menu, True, ButtonPressMask | PointerMotionMask,
                  GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
     XGrabKeyboard(dpy, menu, True, GrabModeAsync, GrabModeAsync, CurrentTime);
@@ -785,14 +782,12 @@ void show_hidden_menu() {
 
             XSetForeground(dpy, gc, bdr_px);
             XDrawRectangle(dpy, menu, gc, 0, 0, menu_w - 1, menu_h - 1);
-
         } else if (ev.type == MotionNotify) {
             int item = ev.xmotion.y / MENU_ITEM_H;
             if (item >= 0 && item < count && item != selected) {
                 selected = item;
                 XClearArea(dpy, menu, 0, 0, 0, 0, True);
             }
-
         } else if (ev.type == ButtonPress) {
             if (selected >= 0 && selected < count) {
                 XMapWindow(dpy, hidden[selected].frame);
@@ -803,7 +798,6 @@ void show_hidden_menu() {
                 focus_window = c;
                 done = 1;
             }
-
         } else if (ev.type == KeyPress) {
             KeySym ks = XLookupKeysym(&ev.xkey, 0);
             if (ks == XK_Escape || ks == XK_q) {
@@ -827,7 +821,7 @@ void show_hidden_menu() {
 }
 
 /*
- * Show all hidden windows
+ * Show all hidden windows and bring them to foreground
  */
 void unhide_all() {
     Window root_ret, parent_ret, *children;
@@ -846,7 +840,7 @@ void unhide_all() {
 }
 
 /*
- * Cycle focus to next window in list
+ * Cycle through windows and bring next window to focus
  */
 void cycle_windows() {
     Window root_ret, parent_ret, *children;
@@ -881,14 +875,15 @@ void cycle_windows() {
 }
 
 /*
- * Handle X11 server errors gracefully
+ * X11 error handler - ignores non-critical errors
  */
 int x_error_handler(Display *d, XErrorEvent *e) {
     return 0;
 }
 
 /*
- * Main event loop - handles all window manager events
+ * Window manager main function
+ * Initializes X11 display, loads configuration, and starts event loop
  */
 int main() {
     load_config();
@@ -896,7 +891,6 @@ int main() {
     if (!(dpy = XOpenDisplay(0x0))) {
         return 1;
     }
-
     XSetErrorHandler(x_error_handler);
 
     root = DefaultRootWindow(dpy);
@@ -918,25 +912,23 @@ int main() {
     Cursor cursor = XCreateFontCursor(dpy, XC_left_ptr);
     XDefineCursor(dpy, root, cursor);
 
-    /* Background removed so feh can work */
-    /* XSetWindowBackground(dpy, root, get_pixel(conf.bg_color)); */
-    /* XClearWindow(dpy, root); */
-
+    XSetWindowBackground(dpy, root, get_pixel(conf.bg_color));
+    XClearWindow(dpy, root);
     XSelectInput(dpy, root, SubstructureRedirectMask | KeyPressMask);
 
     for (int i = 0; i < bind_count; i++) {
-        XGrabKey(dpy, XKeysymToKeycode(dpy, binds[i].key), binds[i].mod,
-                 root, True, GrabModeAsync, GrabModeAsync);
-        XGrabKey(dpy, XKeysymToKeycode(dpy, binds[i].key),
-                 binds[i].mod | Mod2Mask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, XKeysymToKeycode(dpy, binds[i].key), binds[i].mod, root, True,
+                 GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, XKeysymToKeycode(dpy, binds[i].key), binds[i].mod | Mod2Mask, root,
+                 True, GrabModeAsync, GrabModeAsync);
     }
-
     XGrabButton(dpy, Button3, Mod1Mask, root, True, ButtonPressMask,
                 GrabModeAsync, GrabModeAsync, None, None);
     XGrabButton(dpy, Button3, mouse_mod_mask, root, True, ButtonPressMask,
                 GrabModeAsync, GrabModeAsync, None, None);
 
     signal(SIGCHLD, SIG_IGN);
+
     int x11_fd = ConnectionNumber(dpy);
     XEvent ev;
 
@@ -946,8 +938,8 @@ int main() {
 
             if (ev.type == MapRequest) {
                 frame_window(ev.xmaprequest.window);
-
-            } else if (ev.type == UnmapNotify) {
+            }
+            else if (ev.type == UnmapNotify) {
                 Window frame = get_frame(ev.xunmap.window);
                 if (frame) {
                     XWindowAttributes attr;
@@ -958,8 +950,8 @@ int main() {
                         update_client_list();
                     }
                 }
-
-            } else if (ev.type == DestroyNotify) {
+            }
+            else if (ev.type == DestroyNotify) {
                 Window frame = get_frame(ev.xdestroywindow.window);
                 if (frame) {
                     XDestroyWindow(dpy, frame);
@@ -973,14 +965,15 @@ int main() {
                         }
                     }
                 }
-
-            } else if (ev.type == ClientMessage) {
+            }
+            else if (ev.type == ClientMessage) {
                 if (ev.xclient.message_type == wmatoms[NET_WM_STATE]) {
                     if ((Atom)ev.xclient.data.l[1] == wmatoms[NET_WM_STATE_FULLSCREEN] ||
                         (Atom)ev.xclient.data.l[2] == wmatoms[NET_WM_STATE_FULLSCREEN]) {
                         toggle_fullscreen(ev.xclient.window);
                     }
-                } else if (ev.xclient.message_type == wmatoms[NET_ACTIVE_WINDOW]) {
+                }
+                else if (ev.xclient.message_type == wmatoms[NET_ACTIVE_WINDOW]) {
                     Window frame = get_frame(ev.xclient.window);
                     if (frame) {
                         XRaiseWindow(dpy, frame);
@@ -990,8 +983,8 @@ int main() {
                         update_bar();
                     }
                 }
-
-            } else if (ev.type == KeyPress) {
+            }
+            else if (ev.type == KeyPress) {
                 KeySym ks = XLookupKeysym(&ev.xkey, 0);
                 unsigned int st = ev.xkey.state & (Mod1Mask | Mod4Mask | ShiftMask | ControlMask);
 
@@ -1000,23 +993,28 @@ int main() {
                         if (strcasecmp(binds[i].command, "quit") == 0) {
                             XCloseDisplay(dpy);
                             exit(0);
-                        } else if (strcasecmp(binds[i].command, "menu") == 0) {
+                        }
+                        else if (strcasecmp(binds[i].command, "menu") == 0) {
                             show_hidden_menu();
-                        } else if (strcasecmp(binds[i].command, "cycle") == 0) {
+                        }
+                        else if (strcasecmp(binds[i].command, "cycle") == 0) {
                             cycle_windows();
-                        } else if (strcasecmp(binds[i].command, "unhide") == 0) {
+                        }
+                        else if (strcasecmp(binds[i].command, "unhide") == 0) {
                             unhide_all();
-                        } else if (strcasecmp(binds[i].command, "close") == 0) {
+                        }
+                        else if (strcasecmp(binds[i].command, "close") == 0) {
                             if (focus_window) {
                                 XDestroyWindow(dpy, focus_window);
                             }
-                        } else {
+                        }
+                        else {
                             spawn(binds[i].command);
                         }
                     }
                 }
-
-            } else if (ev.type == EnterNotify) {
+            }
+            else if (ev.type == EnterNotify) {
                 if (ev.xcrossing.window != root && ev.xcrossing.window != bar_win) {
                     Window client = find_client_in_frame(ev.xcrossing.window);
                     if (client) {
@@ -1026,8 +1024,8 @@ int main() {
                         update_bar();
                     }
                 }
-
-            } else if (ev.type == Expose && ev.xexpose.count == 0) {
+            }
+            else if (ev.type == Expose && ev.xexpose.count == 0) {
                 if (ev.xexpose.window == bar_win) {
                     update_bar();
                 } else {
@@ -1038,8 +1036,8 @@ int main() {
                         draw_decorations(ev.xexpose.window, fa.width, fa.height - TITLE_HEIGHT);
                     }
                 }
-
-            } else if (ev.type == ButtonPress) {
+            }
+            else if (ev.type == ButtonPress) {
                 Window parent_frame = 0;
                 Window root_r, parent_r, *kids;
                 unsigned int n_kids;
@@ -1047,7 +1045,8 @@ int main() {
                 if (XQueryTree(dpy, ev.xbutton.window, &root_r, &parent_r, &kids, &n_kids)) {
                     if (parent_r != root && parent_r != 0) {
                         parent_frame = parent_r;
-                    } else if (ev.xbutton.window != root) {
+                    }
+                    else if (ev.xbutton.window != root) {
                         parent_frame = ev.xbutton.window;
                     }
                     if (kids) {
@@ -1063,42 +1062,15 @@ int main() {
                     }
                 }
 
-                /*
-                 * Handle window dragging and resizing with modifiers
-                 * - Button1 (Left) with mouse modifier or Alt -> move
-                 * - Button3 (Right) with configured mouse modifier -> resize
-                 * - Button3 with Alt (Mod1) -> move (preserve Alt+RMB behavior)
-                 */
-                int used_mouse_mod = ev.xbutton.state & mouse_mod_mask;
-                int used_alt = ev.xbutton.state & Mod1Mask;
-                if (!is_fs && (used_mouse_mod || used_alt)) {
+                if (!is_fs && (ev.xbutton.state & mouse_mod_mask)) {
                     if (ev.xbutton.button == Button1 || ev.xbutton.button == Button3) {
                         XAllowEvents(dpy, AsyncPointer, CurrentTime);
 
-                        Window target_frame = 0;
-
-                        Window frame_from_client = get_frame(ev.xbutton.window);
-                        if (frame_from_client) {
-                            target_frame = frame_from_client;
-                        }
-                        else if (find_client_in_frame(ev.xbutton.window)) {
-                            target_frame = ev.xbutton.window;
-                        }
-                        else if (ev.xbutton.subwindow) {
-                            target_frame = ev.xbutton.subwindow;
-                        }
-
-                        if (target_frame != 0 && target_frame != bar_win) {
+                        if (ev.xbutton.subwindow != None && ev.xbutton.subwindow != bar_win) {
                             XWindowAttributes attr;
-                            XGetWindowAttributes(dpy, target_frame, &attr);
-                            
+                            XGetWindowAttributes(dpy, ev.xbutton.subwindow, &attr);
                             start_ev = ev.xbutton;
-                            /* If user used Alt+RMB, treat it as a move (like Button1) */
-                            if (ev.xbutton.button == Button3 && used_alt) {
-                                start_ev.button = Button1;
-                            }
-                            start_ev.window = target_frame;
-
+                            start_ev.window = ev.xbutton.subwindow;
                             drag_state.start_root_x = ev.xbutton.x_root;
                             drag_state.start_root_y = ev.xbutton.y_root;
                             drag_state.win_x = attr.x;
@@ -1106,31 +1078,20 @@ int main() {
                             drag_state.win_w = attr.width;
                             drag_state.win_h = attr.height;
 
-                            if (ev.xbutton.button == Button3 && used_mouse_mod) {
-                                int rel_x = ev.xbutton.x_root - attr.x;
-                                int rel_y = ev.xbutton.y_root - attr.y;
-
-                                int w_third = attr.width / 3;
-                                int h_third = attr.height / 3;
-
-                                if (rel_x < w_third) {
-                                    drag_state.resize_x_dir = -1;
-                                } else if (rel_x > w_third * 2) {
-                                    drag_state.resize_x_dir = 1;
-                                } else {
-                                    drag_state.resize_x_dir = 0;
-                                }
-
-                                if (rel_y < h_third) {
-                                    drag_state.resize_y_dir = -1;
-                                } else if (rel_y > h_third * 2) {
-                                    drag_state.resize_y_dir = 1;
-                                } else {
-                                    drag_state.resize_y_dir = 0;
-                                }
-                                
+                            int rel_x = ev.xbutton.x_root - attr.x;
+                            int rel_y = ev.xbutton.y_root - attr.y;
+                            if (rel_x < attr.width / 3) {
+                                drag_state.resize_x_dir = -1;
+                            } else if (rel_x > attr.width * 2 / 3) {
+                                drag_state.resize_x_dir = 1;
                             } else {
                                 drag_state.resize_x_dir = 0;
+                            }
+                            if (rel_y < attr.height / 3) {
+                                drag_state.resize_y_dir = -1;
+                            } else if (rel_y > attr.height * 2 / 3) {
+                                drag_state.resize_y_dir = 1;
+                            } else {
                                 drag_state.resize_y_dir = 0;
                             }
 
@@ -1139,11 +1100,9 @@ int main() {
                             XRaiseWindow(dpy, start_ev.window);
                         }
                     }
-                } else if (!is_fs && ev.xbutton.window != root && ev.xbutton.window != bar_win &&
-                          ev.xbutton.y < TITLE_HEIGHT && (ev.xbutton.button == Button1 || (ev.xbutton.button == Button3 && (ev.xbutton.state & Mod1Mask)))) {
-                    /*
-                     * Drag by title bar
-                     */
+                }
+                else if (!is_fs && ev.xbutton.window != root && ev.xbutton.window != bar_win &&
+                         ev.xbutton.y < TITLE_HEIGHT && ev.xbutton.button == Button1) {
                     XAllowEvents(dpy, AsyncPointer, CurrentTime);
                     XWindowAttributes fa;
                     XGetWindowAttributes(dpy, ev.xbutton.window, &fa);
@@ -1151,9 +1110,11 @@ int main() {
 
                     if (ev.xbutton.x < btn_w) {
                         XDestroyWindow(dpy, ev.xbutton.window);
-                    } else if (ev.xbutton.x > (fa.width - btn_w)) {
+                    }
+                    else if (ev.xbutton.x > (fa.width - btn_w)) {
                         XUnmapWindow(dpy, ev.xbutton.window);
-                    } else {
+                    }
+                    else {
                         XRaiseWindow(dpy, ev.xbutton.window);
                         XWindowAttributes attr;
                         XGetWindowAttributes(dpy, ev.xbutton.window, &attr);
@@ -1165,28 +1126,17 @@ int main() {
                         XGrabPointer(dpy, root, False, ButtonMotionMask | ButtonReleaseMask,
                                     GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
                     }
-
                 } else {
-                    /*
-                     * Regular click - replay pointer to allow window to handle it
-                     */
                     if (parent_frame != 0 && parent_frame != bar_win) {
                         XRaiseWindow(dpy, parent_frame);
                     }
                     XAllowEvents(dpy, ReplayPointer, CurrentTime);
                 }
-
-            } else if (ev.type == MotionNotify && start_ev.window) {
-                /*
-                 * Drain any extra MotionNotify events and use the
-                 * last one for smooth movement. Use xmotion fields
-                 * (not xbutton) to get correct root coordinates.
-                 */
-                XEvent mev = ev;
-                while (XCheckTypedEvent(dpy, MotionNotify, &mev));
-
-                int xdiff = mev.xmotion.x_root - drag_state.start_root_x;
-                int ydiff = mev.xmotion.y_root - drag_state.start_root_y;
+            }
+            else if (ev.type == MotionNotify && start_ev.window) {
+                while (XCheckTypedEvent(dpy, MotionNotify, &ev));
+                int xdiff = ev.xbutton.x_root - drag_state.start_root_x;
+                int ydiff = ev.xbutton.y_root - drag_state.start_root_y;
 
                 if (start_ev.button == Button3) {
                     int new_x = drag_state.win_x;
@@ -1227,13 +1177,12 @@ int main() {
                     if (client) {
                         XResizeWindow(dpy, client, new_w, new_h - TITLE_HEIGHT);
                     }
-
                 } else if (start_ev.button == Button1) {
                     XMoveWindow(dpy, start_ev.window, drag_state.win_x + xdiff,
-                                drag_state.win_y + ydiff);
+                               drag_state.win_y + ydiff);
                 }
-
-            } else if (ev.type == ButtonRelease) {
+            }
+            else if (ev.type == ButtonRelease) {
                 if (start_ev.window) {
                     XUngrabPointer(dpy, CurrentTime);
                     start_ev.window = 0;
