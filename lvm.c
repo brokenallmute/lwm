@@ -636,6 +636,8 @@ void frame_window(Window client) {
 
     if (!should_frame) {
         XMapWindow(dpy, client);
+        XRaiseWindow(dpy, client);
+        XSetInputFocus(dpy, client, RevertToPointerRoot, CurrentTime);
         add_client(client, 0);
         update_client_list();
         return;
@@ -1014,6 +1016,20 @@ int main() {
                         }
                     }
                 }
+            }
+            else if (ev.type == ConfigureRequest) {
+                XConfigureRequestEvent *cre = &ev.xconfigurerequest;
+                XWindowChanges wc;
+                
+                wc.x = cre->x;
+                wc.y = cre->y;
+                wc.width = cre->width;
+                wc.height = cre->height;
+                wc.border_width = cre->border_width;
+                wc.sibling = cre->above;
+                wc.stack_mode = cre->detail;
+                
+                XConfigureWindow(dpy, cre->window, cre->value_mask, &wc);
             }
             else if (ev.type == EnterNotify) {
                 if (ev.xcrossing.window != root && ev.xcrossing.window != bar_win) {
